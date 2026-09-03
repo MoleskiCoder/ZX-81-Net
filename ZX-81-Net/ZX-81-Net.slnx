@@ -5,5 +5,6 @@
   <Project Path="../libraries/EightBitNet/Z80/Z80.csproj" />
   <Project Path="../libraries/EightBitNet/Z80/Z80.HarteTest/Z80.HarteTest.csproj" />
   <Project Path="../libraries/EightBitNet/Z80/Z80.UnitTests/Z80.UnitTests.csproj" />
+  <Project Path="ZX-81-Net.UnitTests/ZX-81-Net.UnitTests.csproj" Id="8b3d7371-a9b2-48a0-8a7a-d8b0e6437838" />
   <Project Path="ZX-81-Net/ZX-81-Net.csproj" />
 </Solution>

@@ -1,21 +1,26 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <OutputType>Exe</OutputType>
     <TargetFramework>net10.0</TargetFramework>
-    <RootNamespace>ZX_81_Net</RootNamespace>
+    <RootNamespace>ZX_81_Net.UnitTests</RootNamespace>
+    <LangVersion>latest</LangVersion>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="SDL3-CS" Version="3.4.16" />
+    <PackageReference Include="MSTest" Version="4.0.2" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\libraries\EightBitNet\EightBit\EightBit.csproj" />
     <ProjectReference Include="..\..\libraries\EightBitNet\Gaming\Gaming.csproj" />
     <ProjectReference Include="..\..\libraries\EightBitNet\Z80\Z80.csproj" />
+    <ProjectReference Include="..\ZX-81-Net\ZX-81-Net.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Microsoft.VisualStudio.TestTools.UnitTesting" />
   </ItemGroup>
 
 </Project>
