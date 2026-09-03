@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "ZX-81-Net": {
+      "commandName": "Project",
+      "workingDirectory": "C:\\github\\ZX-81-Net"
+    }
+  }
+}

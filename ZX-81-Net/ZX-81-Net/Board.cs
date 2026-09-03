@@ -21,6 +21,7 @@
 
         public override void Initialize()
         {
+            base.Initialize();
             var romDirectory = this._configuration.RomDirectory;
             this.Plug(romDirectory + "\\zx81.rom");	// ZX-81 Basic
             this.ULA.Proceed += this.ULA_Proceed;
