@@ -1,10 +1,6 @@
 ﻿namespace ZX_81_Net
 {
     using SDL3;
-    using System.Diagnostics;
-    using System.Formats.Tar;
-    using System.IO.Compression;
-    using ZX_81_Net;
 
     internal sealed class Board : AbstractBoard
     {

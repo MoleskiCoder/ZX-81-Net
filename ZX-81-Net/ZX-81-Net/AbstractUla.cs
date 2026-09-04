@@ -9,8 +9,6 @@
     {
         private const int CharactersPerLine = ITimings.RasterWidth / PixelsPerCharacter;
 
-        public const int InterruptDuration = 64;   // 32 CPU cycles
-
         public const int PixelsPerCharacter = 8;
 
         private readonly Bus _bus;
@@ -22,7 +20,6 @@
 
         protected ColorT? _inkColour;
         protected ColorT? _paperColour;
-
 
         private int _lineCounter; // 3 bits
         private bool _lineCounterFrozen = false;
@@ -49,8 +46,6 @@
             return this.CharacterAddress(this._character);
         }
 
-        //protected ColorT? _borderColour;
-
         protected byte _oldRefreshRegister;
         protected bool _enabledNMI;
 
@@ -60,6 +55,8 @@
         protected abstract AbstractColorPalette<ColorT> Palette { get; }
 
         public ColorT[]? Pixels => this._pixels;
+
+        private int CharactersPerFrame => this._timings.TotalClocks / PixelsPerCharacter;
 
         public event EventHandler<EventArgs>? Proceed;
 
@@ -137,6 +134,7 @@
 
         protected bool RenderingText()
         {
+            Debug.Assert(this._cpu.M1.Lowered());
             var addressing = (this._bus.Address.High & (byte)Bits.Bit7) != 0;
             var rendering = (this._bus.Data & (byte)Bits.Bit6) == 0;
             return addressing && rendering;
@@ -171,23 +169,23 @@
             }
         }
 
-        public void RenderLine()
-        {
-            Console.Out.WriteLine($"ULA: Rendering scan line {this._scanLine}, (character line {this._scanLine / PixelsPerCharacter})");
-            for (int character = 0; character < CharactersPerLine; ++character)
-            {
-                this.RenderCharacter();
-            }
-            this.MaybeRaiseNMI();
-            ++this._scanLine;
-            this._rasterOffset = 0;
-        }
-
         public void RenderLines()
         {
-            this._scanLine = 0;
-            for (int i = 0; i < this._timings.TotalHeight; ++i)
-                this.RenderLine();
+            Console.Out.WriteLine("ULA: Rendering frame");
+            for (int character = 0; character < this.CharactersPerFrame; ++character)
+            {
+                if (character % CharactersPerLine == 0)
+                {
+                    //Console.WriteLine($"ULA: EOL, Scan line {this._scanLine}");
+                    this.MaybeRaiseNMI();
+                    this._scanLine++;
+                    this._rasterOffset = 0;
+                    this.Tick(ITimings.HorizontalRetraceClocks);
+                }
+                if (this._scanLine < this._timings.RasterHeight)
+                    this.RenderCharacter();
+            }
+            //Environment.Exit(0);
         }
 
         public void PokeKey(KeyT raw) => this._keyboardRaw.Add(raw);
@@ -199,6 +197,10 @@
             base.RaisePOWER();
             this._pixels = new ColorT[ITimings.RasterWidth * this._timings.RasterHeight];
             this.InitialiseKeyboardMapping();
+
+            //this._cpu.RaisedRFSH += this.CPU_RaisedRFSH;
+            //this._ports.ReadingPort += this.Ports_ReadingPort;
+            //this._ports.WrittenPort += this.Ports_WrittenPort;
         }
 
         protected abstract void InitialiseKeyboardMapping();
@@ -258,9 +260,14 @@
 
             this.FreezeLINECNTR();
 
+            this._scanLine = 0;
+            this._rasterOffset = 0;
+            Console.WriteLine("ULA: Stop HSYNC");
+            Console.WriteLine("ULA: Start VSYNC");
+
             var timingMessage = pal ? "PAL" : "NTSC";
-            Console.Out.WriteLine($"ULA: Read port {port.Low}.  Timing is {timingMessage}");
-            Console.Out.WriteLine($"ULA: LINECNTR frozen ({this._lineCounter})");
+            Console.WriteLine($"ULA: Read port {port.Low}.  Timing is {timingMessage}");
+            Console.WriteLine($"ULA: LINECNTR frozen ({this._lineCounter})");
         }
 
         private void MaybeWrittenPort(Register16 port)
@@ -292,8 +299,10 @@
 
             this.ThawLINECNTR();
 
-            Console.Out.WriteLine($"ULA: Written port {port.Low} NMI {(this._enabledNMI ? "enabled" : "disabled")}");
-            Console.Out.WriteLine($"ULA: LINECNTR thawed ({this._lineCounter})");
+            Console.WriteLine($"ULA: Written port {port.Low} NMI {(this._enabledNMI ? "enabled" : "disabled")}");
+            Console.WriteLine($"ULA: LINECNTR thawed ({this._lineCounter})");
+            Console.WriteLine("ULA: Stop VSYNC");
+            Console.WriteLine("ULA: Start HSYNC");
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

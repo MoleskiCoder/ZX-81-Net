@@ -1,7 +1,6 @@
 ﻿namespace ZX_81_Net
 {
     using System;
-    using System.Collections.Generic;
     using System.Diagnostics;
 
     internal class AbstractBoard : EightBit.Bus
@@ -15,8 +14,6 @@
         protected readonly EightBit.MemoryMapping _unused32kMapping;
 
         private int _allowed;
-
-        //public int NumberOfExpansions => this._expansions.Count;
 
         protected AbstractBoard(ITimings timings, bool disassembling)
         {
@@ -96,9 +93,13 @@
 
         private void CPU_ExecutingInstruction(object? sender, System.EventArgs e)
         {
+            Debug.Assert(sender is Z80.Z80);
+            var cpu = (Z80.Z80)sender;
+            if (cpu.OpCode == 0)
+                return;
+            var state = Z80.Disassembler.State(cpu);
             Debug.Assert(this._disassembler is not null, "Disassembler has not been initialized.");
-            var state = Z80.Disassembler.State(this.CPU);
-            var disassembly = this._disassembler.Disassemble(this.CPU);
+            var disassembly = this._disassembler.Disassemble(cpu);
             System.Console.WriteLine($"{state} {disassembly}");
         }
 
