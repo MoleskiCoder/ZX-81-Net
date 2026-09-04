@@ -7,7 +7,8 @@
         public ITimings Timings { get; } = new PalTimings();
         //public ITimings Timings { get; } = new NtscTimings();
 
-        public bool DebugMode { get; set; } = true;
+        public bool DebugMode { get; set; }
+        //public bool DebugMode { get; set; } = true;
 
         //public SDL.LogPriority LoggingLevel { get; set; } = SDL.LogPriority.Debug;
         public SDL.LogPriority LoggingLevel { get; set; } = SDL.LogPriority.Info;

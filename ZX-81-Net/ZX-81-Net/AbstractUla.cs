@@ -7,13 +7,11 @@
 
     internal abstract class AbstractUla<ColorT, KeyT> : EightBit.ClockedChip
     {
-        private const int CharactersPerLine = ITimings.ActiveRasterWidth / PixelsPerCharacter;
+        private const int CharactersPerLine = ITimings.RasterWidth / PixelsPerCharacter;
 
         public const int InterruptDuration = 64;   // 32 CPU cycles
 
         public const int PixelsPerCharacter = 8;
-
-        private const ushort AttributeAddress = 0x1800;     // Offset in VRAM for attributes (VRAM starts at 0x4000, so attributes are at 0x5800)
 
         private readonly Bus _bus;
         private readonly ITimings _timings;
@@ -22,18 +20,39 @@
 
         private ColorT[]? _pixels;
 
-        private bool _flashing;
-        private int _frameCounter;   // 4 bits
-        private int _verticalCounter; // 9 bits
-        private int _horizontalCounter; // 9 bits
-        protected ColorT? _borderColour;
+        protected ColorT? _inkColour;
+        protected ColorT? _paperColour;
 
-        // Output port information
-        private EightBit.PinLevel _mic = EightBit.PinLevel.Low; // Bit 3
-        private EightBit.PinLevel _speaker = EightBit.PinLevel.Low; // Bit 4
 
-        // Input port information
-        private EightBit.PinLevel _ear = EightBit.PinLevel.Low; // Bit 6
+        private int _lineCounter; // 3 bits
+        private bool _lineCounterFrozen = false;
+
+        protected int LINECNTR => this._lineCounter & (int)Mask.Three;
+
+        // These aren't real in the ULA, but they're useful for me
+        // to work out where I am in the pixel buffer.
+        protected int _scanLine;
+        protected int _rasterOffset;
+
+        protected byte _character;
+
+        protected ushort CharacterAddress(byte code)
+        {
+            var high = (byte)(this._cpu.IV & (byte)Mask.Seven);
+            var low = (byte)((code << 3) | this.LINECNTR);
+            return Chip.MakeShort(low, high);
+        }
+
+        protected ushort CharacterAddress()
+        {
+            Debug.Assert(this.RenderingText());
+            return this.CharacterAddress(this._character);
+        }
+
+        //protected ColorT? _borderColour;
+
+        protected byte _oldRefreshRegister;
+        protected bool _enabledNMI;
 
         protected readonly Dictionary<byte, KeyT[]> _keyboardMapping = [];
         private readonly HashSet<KeyT> _keyboardRaw = [];
@@ -42,25 +61,17 @@
 
         public ColorT[]? Pixels => this._pixels;
 
-        public int FrameUlaCycles => ITimings.TotalHorizontalClocks * this.V + this.C;
-        public int FrameCpuCycles => this.FrameUlaCycles / 2;
-
-        public bool Flashing => this._flashing;
-
-        public ref int F => ref this._frameCounter;
-
-        public ref int V => ref this._verticalCounter;
-
-        public ref int C => ref this._horizontalCounter;
-
         public event EventHandler<EventArgs>? Proceed;
 
         protected AbstractUla(EightBit.Bus bus, ITimings timings, Z80.Z80 cpu, InputOutput ports)
         {
+
             this._bus = bus ?? throw new ArgumentNullException(nameof(bus));
             this._timings = timings ?? throw new ArgumentNullException(nameof(timings));
             this._cpu = cpu ?? throw new ArgumentNullException(nameof(cpu));
             this._ports = ports ?? throw new ArgumentNullException(nameof(ports));
+
+            this._cpu.RaisedRFSH += this.CPU_RaisedRFSH;
 
             this.Ticked += this.Ula_Ticked;
 
@@ -68,9 +79,25 @@
             this._ports.WrittenPort += this.Ports_WrittenPort;
         }
 
+        private void CPU_RaisedRFSH(object? sender, EventArgs e)
+        {
+            var previous = (this._oldRefreshRegister & 0b00100000) != 0;
+            this._oldRefreshRegister = (byte)this._cpu.REFRESH;
+            var current = (this._oldRefreshRegister & 0b00100000) != 0;
+            if (previous && !current)
+            {
+                this._cpu.LowerINT();
+            }
+
+            if (this.RenderingText())
+            {
+                this._character = this._bus.Data;
+                this._bus.Data = 0;
+            }
+        }
+
         private void Ula_Ticked(object? sender, EventArgs e)
         {
-            ++this.C;
             if ((this.Cycles % 2) == 0)
             {
                 this.Proceed?.Invoke(this, EventArgs.Empty);
@@ -81,113 +108,86 @@
 
         private void Ports_WrittenPort(object? sender, PortEventArgs e) => this.MaybeWrittenPort(e.Port);
 
-        public void SetBorder(int value) => this._borderColour = this.Palette.GetColor(value);
-
-        private void ProcessActiveLine(int y)
+        protected void FreezeLINECNTR()
         {
-            this.RenderLeftRasterBorder(y);
-            this.RenderVRAM(y);
-            this.RenderRightRasterBorder(y);
-            this.Tick(ITimings.HorizontalRetraceClocks);
+            this._lineCounterFrozen = true;
+            this.ResetLINECNTR();
         }
 
-        private void ProcessVerticalSync()
+        protected void ThawLINECNTR()
         {
-            if (this.V == 0)
+            this._lineCounterFrozen = false;
+        }
+
+        protected void IncrementLINECNTR()
+        {
+            if (_lineCounterFrozen) return;
+            this._lineCounter = (this._lineCounter + 1) & (int)Mask.Three;
+        }
+
+        protected void ResetLINECNTR() => this._lineCounter = 0;
+
+        protected void MaybeRaiseNMI()
+        {
+            if (this._enabledNMI)
             {
-                this._cpu.LowerINT();
+                this._cpu.RaiseNMI();
             }
-
-            this.Tick(InterruptDuration);
-            this._cpu.RaiseINT();
-            this.Tick(ITimings.LeftRasterBorder - InterruptDuration + ITimings.ActiveRasterWidth + ITimings.RightRasterBorder + ITimings.HorizontalRetraceClocks);
         }
 
-        private void ProcessBorder(int y)
+        protected bool RenderingText()
         {
-            Debug.Assert(y >= 0);
-            this.RenderRasterBorder(ITimings.LeftRasterBorder, y, ITimings.ActiveRasterWidth);
-            this.RenderRightRasterBorder(y);
-            this.Tick(ITimings.HorizontalRetraceClocks);
-            this.RenderLeftRasterBorder(y);
+            var addressing = (this._bus.Address.High & (byte)Bits.Bit7) != 0;
+            var rendering = (this._bus.Data & (byte)Bits.Bit6) == 0;
+            return addressing && rendering;
         }
 
-        private void RenderLeftRasterBorder(int y) => this.RenderRasterBorder(0, y, ITimings.LeftRasterBorder);
-
-        private void RenderRightRasterBorder(int y) => this.RenderRasterBorder(ITimings.LeftRasterBorder + ITimings.ActiveRasterWidth, y, ITimings.RightRasterBorder);
-
-        private void RenderRasterBorder(int x, int y, int width)
+        public void RenderCharacter(byte bitmap)
         {
-            Debug.Assert(x >= 0);
-            Debug.Assert(y >= 0);
-            Debug.Assert(width > 0);
-            // The ZX Spectrum ULA, Chris Smith
-            // Chapter 12 (Generating the Display), Border Generation
-            Debug.Assert(x % PixelsPerCharacter == 0);
-            Debug.Assert(width % PixelsPerCharacter == 0);
-            var chunks = width / PixelsPerCharacter;
-            var offset = y * ITimings.RasterWidth + x;
-            for (int chunk = 0; chunk < chunks; ++chunk)
+            Debug.Assert(this._scanLine < this._timings.RasterHeight);
+            Debug.Assert(this._rasterOffset < ITimings.RasterWidth);
+            for (int bit = 0; bit < PixelsPerCharacter; ++bit)
             {
-                var colour = this._borderColour;
-                Debug.Assert(colour is not null);
-                for (int pixel = 0; pixel < PixelsPerCharacter; ++pixel)
-                {
-                    this.SetClockedPixel(offset++, colour);
-                }
+                var pixel = (bitmap & Bit(bit)) != 0;
+                Debug.Assert(this._inkColour is not null);
+                Debug.Assert(this._paperColour is not null);
+                var position = this._scanLine * ITimings.RasterWidth + this._rasterOffset++;
+                this.SetClockedPixel(position, pixel ? this._inkColour : this._paperColour);
+            }
+        }
+
+        public void RenderCharacter()
+        {
+            if (this.RenderingText())
+            {
+                //Console.Out.WriteLine($"ULA: Rendering character at raster offset {this._rasterOffset}, {this._rasterOffset / PixelsPerCharacter} character");
+                var contents = this._bus.Peek(CharacterAddress());
+                this.RenderCharacter(contents);
+            }
+            else
+            {
+                //Console.Out.WriteLine($"ULA: Rendering blank (at raster offset {this._rasterOffset}, {this._rasterOffset / PixelsPerCharacter} character");
+                this.RenderCharacter(0);
             }
         }
 
         public void RenderLine()
         {
-            Debug.Assert(this.C == 0);
-
-            if (this.V < ITimings.VerticalRetraceLines)
-                this.ProcessVerticalSync();
-            else if (this.V < (ITimings.VerticalRetraceLines + this._timings.TopRasterBorder))
-                this.ProcessBorder(this.V - ITimings.VerticalRetraceLines);
-            else if (this.V < (ITimings.VerticalRetraceLines + this._timings.TopRasterBorder + ITimings.ActiveRasterHeight))
-                this.ProcessActiveLine(this.V - ITimings.VerticalRetraceLines);
-            else if (this.V < (ITimings.VerticalRetraceLines + this._timings.TopRasterBorder + ITimings.ActiveRasterHeight + this._timings.BottomRasterBorder))
-                this.ProcessBorder(this.V - ITimings.VerticalRetraceLines);
-
-            //Debug.Assert(this.C == ITimings.TotalHorizontalClocks);
-            this.IncrementV();
+            Console.Out.WriteLine($"ULA: Rendering scan line {this._scanLine}, (character line {this._scanLine / PixelsPerCharacter})");
+            for (int character = 0; character < CharactersPerLine; ++character)
+            {
+                this.RenderCharacter();
+            }
+            this.MaybeRaiseNMI();
+            ++this._scanLine;
+            this._rasterOffset = 0;
         }
 
         public void RenderLines()
         {
-            Debug.Assert(this.V == 0);
+            this._scanLine = 0;
             for (int i = 0; i < this._timings.TotalHeight; ++i)
                 this.RenderLine();
-            Debug.Assert(this.V == this._timings.TotalHeight);
-            this.ResetV();
-        }
-
-        private void IncrementF()
-        {
-            if ((++this.F & (int)Mask.Four) == 0)
-            {
-                this.ResetF();
-            }
-        }
-
-        private void ResetF()
-        {
-            this.F = 0;
-            this.Flash();
-        }
-
-        private void ResetV()
-        {
-            this.V = 0;
-            this.IncrementF();
-        }
-
-        private void IncrementV()
-        {
-            ++this.V;
-            this.C = 0;
         }
 
         public void PokeKey(KeyT raw) => this._keyboardRaw.Add(raw);
@@ -199,11 +199,6 @@
             base.RaisePOWER();
             this._pixels = new ColorT[ITimings.RasterWidth * this._timings.RasterHeight];
             this.InitialiseKeyboardMapping();
-            this.ResetF();
-            this.ResetV();
-            this.C = 0;
-            this.SetBorder((int)AbstractColorPalette<ColorT>.Index.Black);
-            this._flashing = false;
         }
 
         protected abstract void InitialiseKeyboardMapping();
@@ -241,23 +236,31 @@
 
         // 0 - 4	Keyboard Inputs(0 = Pressed, 1 = Released)
         // 5		Not used
-        // 6		EAR Input(CAS LOAD)
-        // 7		Not used
+        // 6		UK/US select
+        // 7		EAR Input(CAS LOAD)
         // A8..A15	Keyboard Address Output(0 = Select)
 
         // 128 64 32 16  8  4  2  U
         //   7  6  5  4  3  2  1  0
         //            <----------->	Keyboard
-        //         -				Not used
-        //      -					Ear input
-        //   -						Not used
+        //         -				Not used (always 1)
+        //      -					UK/US select
+        //   -						Ear input
 
         private void ReadingPort(Register16 port)
         {
             var portHigh = port.High;
             var selected = this.FindSelectedKeys((byte)~portHigh);
-            var value = selected | (this._ear.Raised() ? Bit(6) : 0);
+            var pal = this._timings is PalTimings;
+            var timing = pal ? Bit(6) : 0;
+            var value = selected | timing;
             this._ports.WriteInputPort(port, (byte)value);
+
+            this.FreezeLINECNTR();
+
+            var timingMessage = pal ? "PAL" : "NTSC";
+            Console.Out.WriteLine($"ULA: Read port {port.Low}.  Timing is {timingMessage}");
+            Console.Out.WriteLine($"ULA: LINECNTR frozen ({this._lineCounter})");
         }
 
         private void MaybeWrittenPort(Register16 port)
@@ -268,90 +271,29 @@
             }
         }
 
-        // 0 - 2	Border Color(0..7) (always with Bright = off)
-        // 3		MIC Output(CAS SAVE) (0 = On, 1 = Off)
-        // 4		Beep Output(ULA Sound)    (0 = Off, 1 = On)
-        // 5 - 7	Not used
+        // 0 - 1	NMI control, bit 0 enable, bit 1 disable (both low)
+        // 2 - 7	Not used
 
         // 128 64 32 16  8  4  2  U
         //   7  6  5  4  3  2  1  0
-        //                  <----->	Border colour
-        //               -		    Mic output
-        //            -				Beep output
-        //   <----->				Not used
+        //                        - NMI enable low
+        //                     -    NMI disable low
+        //   <-------------->       Unused
 
         private void WrittenPort(Register16 port)
         {
-            var value = this._ports.ReadOutputPort(port);
+            // Nominally FE Bit 0 of port address low == NMI on
+            var enableNMI = (port.Low & (byte)Bits.Bit0) == 0;
+            this._enabledNMI = enableNMI;
 
-            this._mic.Match(value & (byte)Bits.Bit3);
-            this._speaker.Match(value & (byte)Bits.Bit4);
+            // Nominally FD Bit 1 of port address low == NMI off
+            var disableNMI = (port.Low & (byte)Bits.Bit1) == 0;
+            this._enabledNMI = !disableNMI;
 
-            this.SetBorder(value & (byte)Mask.Three);
-        }
+            this.ThawLINECNTR();
 
-        private void Flash() => this._flashing = !this._flashing;
-
-        private static ushort AttributeOffset(int line)
-        {
-            Debug.Assert(line < 192);
-            var row = line >> 3;
-            Debug.Assert(row < 24);
-            return (ushort)(AttributeAddress + (row << 5));
-        }
-
-        private static ushort PixelOffset(int line)
-        {
-            Debug.Assert(line < 192);
-            var scan = line & (int)Mask.Three;
-            Debug.Assert(scan < PixelsPerCharacter);
-            line >>= 3;
-            var row = line & (int)Mask.Three;
-            Debug.Assert(row < PixelsPerCharacter);
-            line >>= 3;
-            var chunk = line & (int)Mask.Two;
-            Debug.Assert(chunk < 3);
-            return (ushort)(chunk * 0x0800 + row * 0x20 + scan * 0x100);
-        }
-
-        private void RenderVRAM(int y)
-        {
-            // Check that incoming row is not in either the top or bottom border area
-            // and is within the active raster height
-            Debug.Assert(y >= 0);
-            Debug.Assert(y < (this._timings.RasterHeight - this._timings.BottomRasterBorder));
-            Debug.Assert(y >= this._timings.TopRasterBorder);
-
-            var indexY = y - this._timings.TopRasterBorder;
-            Debug.Assert(indexY >= 0);
-            Debug.Assert(indexY < ITimings.ActiveRasterHeight);
-
-            var bitmapAddress = PixelOffset(indexY);        // Starting pixel row position in VRAM
-            var attributeAddress = AttributeOffset(indexY); // Starting attribute row position in VRAM
-
-            // Position in pixel render 
-            var pixelBase = ITimings.LeftRasterBorder + (y * ITimings.RasterWidth);
-
-            for (var currentCharacter = 0; currentCharacter < CharactersPerLine; ++currentCharacter)
-            {
-                //var attribute = this._vram.Peek(attributeAddress++);
-                ////var ink = attribute & (byte)Mask.Three;
-                ////var paper = (attribute >> 3) & (int)Mask.Three;
-                ////var bright = (attribute & (byte)Bits.Bit6) != 0;
-                ////var flashing = (attribute & (byte)Bits.Bit7) != 0;
-                //var background = this.Palette.GetColor(flashing && this.Flashing ? ink : paper, bright);
-                //var foreground = this.Palette.GetColor(flashing && this.Flashing ? paper : ink, bright);
-
-                //var bitmap = this._vram.Peek(bitmapAddress++);
-                var byteX = currentCharacter << 3;
-                for (int bit = 0; bit < PixelsPerCharacter; ++bit)
-                {
-                    //var pixel = (bitmap & Bit(bit)) != 0;
-                    var x = (~bit & (int)Mask.Three) | byteX;
-
-                    //this.SetClockedPixel(pixelBase + x, pixel ? foreground : background);
-                }
-            }
+            Console.Out.WriteLine($"ULA: Written port {port.Low} NMI {(this._enabledNMI ? "enabled" : "disabled")}");
+            Console.Out.WriteLine($"ULA: LINECNTR thawed ({this._lineCounter})");
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

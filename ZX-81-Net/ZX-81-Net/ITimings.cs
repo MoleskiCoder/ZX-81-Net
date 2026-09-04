@@ -2,11 +2,11 @@
 {
     internal interface ITimings
     {
-        public const int ActiveRasterWidth = 256;
-        public const int ActiveRasterHeight = 192;
+        public const int ActiveRasterWidth = 256;   // 32 characters
+        public const int ActiveRasterHeight = 192;  // 24 characters
 
-        public const int LeftRasterBorder = 64;
-        public const int RightRasterBorder = 64;
+        public const int LeftRasterBorder = 64;     // 8 characters
+        public const int RightRasterBorder = 64;    // 8 characters
 
         public const int RasterWidth = LeftRasterBorder + ActiveRasterWidth + RightRasterBorder;
 
