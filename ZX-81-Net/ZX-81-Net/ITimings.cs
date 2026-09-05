@@ -18,14 +18,17 @@
         public abstract int TopRasterBorder { get; }
         public abstract int BottomRasterBorder { get; }
 
-        public abstract float UlaClockRate { get; }
-        public float CpuClockRate => this.UlaClockRate / 2.0f;
+        public const float UlaClockRate = 6_500_000.0f;
+
+        public float CpuClockRate => UlaClockRate / 2.0f;
+
+        public const int PowerOnResetCycles = 1; // (int)CpuClockRate / 10;
 
         public int RasterHeight => this.TopRasterBorder + ActiveRasterHeight + this.BottomRasterBorder;
         public int TotalHeight => VerticalRetraceLines + this.RasterHeight;
 
         public int TotalClocks => TotalHorizontalClocks * this.TotalHeight;
 
-        public float FramesPerSecond => this.UlaClockRate / this.TotalClocks;
+        public float FramesPerSecond => UlaClockRate / this.TotalClocks;
     }
 }

@@ -4,7 +4,5 @@
     {
         public int TopRasterBorder { get; } = 32;
         public int BottomRasterBorder { get; } = 32;
-
-        public float UlaClockRate { get; } = 6_500_000.0f;
     }
 }

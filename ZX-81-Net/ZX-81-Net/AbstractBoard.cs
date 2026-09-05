@@ -45,7 +45,6 @@
 
         public override void Initialize()
         {
-            this.CPU.ExecutedInstruction += this.CPU_ExecutedInstruction;
             if (this._disassembling)
             {
                 this.CPU.ExecutingInstruction += this.CPU_ExecutingInstruction;
@@ -56,15 +55,27 @@
         {
             base.RaisePOWER();
             this.CPU.RaisePOWER();
-            this.CPU.LowerRESET();
             this.CPU.RaiseINT();
             this.CPU.RaiseNMI();
+            this.RunPowerOnReset();
         }
 
         public override void LowerPOWER()
         {
             this.CPU.LowerPOWER();
             base.LowerPOWER();
+        }
+
+        private void RunPowerOnReset()
+        {
+            this.CPU.RaiseRESET();
+            this.CPU.LowerRESET();
+            this._allowed = ITimings.PowerOnResetCycles;
+            while (this._allowed > 0)
+            {
+                this.RunCycle();
+            }
+            this.CPU.RaiseRESET();
         }
 
         public void Plug(string path) => this.ROM.Load(path);
@@ -88,8 +99,6 @@
 
             return this._unused32kMapping;
         }
-
-        private void CPU_ExecutedInstruction(object? sender, EventArgs e) => this.CPU.RaiseRESET();
 
         private void CPU_ExecutingInstruction(object? sender, System.EventArgs e)
         {
