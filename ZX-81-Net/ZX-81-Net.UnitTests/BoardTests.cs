@@ -65,11 +65,40 @@
         }
 
         [TestMethod]
-        public void TestPowerOnReset()
+        public void TestRomMapping()
         {
-            Assert.AreEqual(1, this._instructionsUnderReset);
-            this._board?.CPU.PoweredStep();
-            Assert.AreEqual(1, this._instructionsUnderReset);
+            var board = this._board;
+            Debug.Assert(board is not null);
+            var rom = board.ROM;
+            Debug.Assert(rom is not null);
+            var size = rom.Size;
+            Assert.AreEqual(0x2000, size);
+            for (ushort i = 0; i < size; ++i)
+            {
+                var value = rom.Peek(i);
+                Assert.AreEqual(value, board.Peek((ushort)(0x0000 + i)));
+                Assert.AreEqual(value, board.Peek((ushort)(0x2000 + i)));
+                Assert.AreEqual(value, board.Peek((ushort)(0x8000 + i)));
+                Assert.AreEqual(value, board.Peek((ushort)(0xa000 + i)));
+            }
+        }
+
+        [TestMethod]
+        public void TestRamMapping()
+        {
+            var board = this._board;
+            Debug.Assert(board is not null);
+            var ram = board.RAM;
+            Debug.Assert(ram is not null);
+            var size = ram.Size;
+            Assert.AreEqual(0x4000, size);
+            for (ushort i = 0; i < size; ++i)
+            {
+                var value = Chip.LowByte(i);
+                ram.Poke(i, value);
+                Assert.AreEqual(value, board.Peek((ushort)(0x4000 + i)));
+                Assert.AreEqual(value, board.Peek((ushort)(0xc000 + i)));
+            }
         }
     }
 }
