@@ -1,6 +1,6 @@
 ﻿namespace ZX_81_Net
 {
-    using System;
+    using EightBit;
     using System.Diagnostics;
 
     internal class AbstractBoard : EightBit.Bus
@@ -10,8 +10,6 @@
 
         protected readonly EightBit.MemoryMapping _romMapping;
         protected readonly EightBit.MemoryMapping _ramMapping;
-        protected readonly EightBit.MemoryMapping _unused8kMapping;
-        protected readonly EightBit.MemoryMapping _unused32kMapping;
 
         private int _allowed;
 
@@ -22,11 +20,8 @@
             this.CPU = new Z80.Z80(this, this.Ports);
             this._disassembler = new Z80.Disassembler(this);
             this._disassembling = disassembling;
-
-            this._romMapping = new(this.ROM, 0x0000, 0xffff, EightBit.AccessLevel.ReadOnly);
-            this._ramMapping = new(this.RAM, 0x4000, 0xffff, EightBit.AccessLevel.ReadWrite);
-            this._unused8kMapping = new(this.Unused8K, 0x2000, 0xffff, EightBit.AccessLevel.ReadOnly);
-            this._unused32kMapping = new(this.Unused32K, 0x8000, 0xffff, EightBit.AccessLevel.ReadOnly);
+            this._romMapping = new(this.ROM, 0x0000, (int)Mask.Thirteen, EightBit.AccessLevel.ReadOnly);
+            this._ramMapping = new(this.RAM, 0x4000, (int)Mask.Fourteen, EightBit.AccessLevel.ReadWrite);
         }
 
         public ITimings Timings { get; }
@@ -38,10 +33,6 @@
         public EightBit.Rom ROM { get; } = new EightBit.Rom();
 
         public EightBit.Ram RAM { get; } = new EightBit.Ram(0x4000);
-
-        public EightBit.UnusedMemory Unused8K { get; } = new EightBit.UnusedMemory(0x2000, 0xff);
-
-        public EightBit.UnusedMemory Unused32K { get; } = new EightBit.UnusedMemory(0x8000, 0xff);
 
         public override void Initialize()
         {
@@ -82,22 +73,8 @@
 
         public override EightBit.MemoryMapping Mapping(ushort absolute)
         {
-            if (absolute < 0x2000)
-            {
-                return this._romMapping;
-            }
-
-            if (absolute < 0x4000)
-            {
-                return this._unused8kMapping;
-            }
-
-            if (absolute < 0x8000)
-            {
-                return this._ramMapping;
-            }
-
-            return this._unused32kMapping;
+            var a14 = absolute & (ushort)Bits.Bit14;
+            return a14 == 0 ? this._romMapping : this._ramMapping;
         }
 
         private void CPU_ExecutingInstruction(object? sender, System.EventArgs e)
