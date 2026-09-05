@@ -3,9 +3,9 @@
     using SDL3;
     using System.Diagnostics;
 
-    internal sealed class Cabinet(Configuration configuration, ITimings timings) : Gaming.Game(configuration.LoggingLevel)
+    internal sealed class Cabinet(Configuration configuration) : Gaming.Game(configuration.LoggingLevel)
     {
-        public Board Motherboard { get; } = new Board(configuration, timings);
+        public Board Motherboard { get; } = new Board(configuration);
 
         public Configuration Settings { get; } = configuration;
 
@@ -13,7 +13,7 @@
 
         protected override SDL.PixelFormat PixelFormat => ColorPalette.PixelFormat;
 
-        public override float FramesPerSecond => timings.FramesPerSecond;
+        public override float FramesPerSecond => Settings.Timings.FramesPerSecond;
 
         public override bool UseVSYNC => true;
 
@@ -21,7 +21,7 @@
 
         public override int RasterWidth => ITimings.RasterWidth;
 
-        public override int RasterHeight => timings.RasterHeight;
+        public override int RasterHeight => this.Settings.Timings.RasterHeight;
 
         public override string Title => "Spectrum";
 

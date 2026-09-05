@@ -13,18 +13,20 @@
 
         private int _allowed;
 
-        protected AbstractBoard(ITimings timings, bool disassembling)
+        protected AbstractBoard(Configuration configuration)
         {
-            this.Timings = timings;
+            this.Settings = configuration;
 
             this.CPU = new Z80.Z80(this, this.Ports);
             this._disassembler = new Z80.Disassembler(this);
-            this._disassembling = disassembling;
+            this._disassembling = configuration.DebugMode;
             this._romMapping = new(this.ROM, 0x0000, (int)Mask.Thirteen, EightBit.AccessLevel.ReadOnly);
             this._ramMapping = new(this.RAM, 0x4000, (int)Mask.Fourteen, EightBit.AccessLevel.ReadWrite);
         }
 
-        public ITimings Timings { get; }
+        protected Configuration Settings { get; }
+
+        public ITimings Timings => Settings.Timings;
 
         public Z80.Z80 CPU { get; }
 

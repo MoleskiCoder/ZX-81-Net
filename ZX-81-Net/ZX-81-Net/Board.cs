@@ -6,8 +6,8 @@
     {
         private readonly Configuration _configuration;
 
-        public Board(Configuration configuration, ITimings timings)
-        : base(timings, configuration.DebugMode)
+        public Board(Configuration configuration)
+        : base(configuration)
         {
             this._configuration = configuration;
             this.ULA = new Ula(this);
