@@ -9,6 +9,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="ZX-81-Net.UnitTests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="SDL3-CS" Version="3.4.16" />
   </ItemGroup>
 
