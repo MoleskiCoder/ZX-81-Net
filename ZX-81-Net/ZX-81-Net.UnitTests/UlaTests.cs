@@ -34,6 +34,105 @@
         }
 
         [TestMethod]
+        public void TestNMIPulseWidth()
+        {
+            this.EnableNMI();
+
+            var cpu = this._board.CPU;
+            var ula = this.ULA;
+
+            var ulaCycles = 0;
+            void ULA_Ticked(object? s, EventArgs e) => ulaCycles++;
+            ula.Ticked += ULA_Ticked;
+
+            int? loweredAt = null;
+            int? raisedAt = null;
+            void CPU_LoweredNMI(object? s, EventArgs e) => loweredAt = ulaCycles;
+            void CPU_RaisedNMI(object? s, EventArgs e)
+            {
+                Assert.IsNotNull(loweredAt);
+                Assert.IsNull(raisedAt);
+                raisedAt = ulaCycles;
+            }
+            cpu.LoweredNMI += CPU_LoweredNMI;
+            cpu.RaisedNMI += CPU_RaisedNMI;
+
+            ula.RenderLine();
+
+            ula.Ticked -= ULA_Ticked;
+            cpu.LoweredNMI -= CPU_LoweredNMI;
+            cpu.RaisedNMI -= CPU_RaisedNMI;
+
+            Assert.IsNotNull(loweredAt);
+            Assert.IsNotNull(raisedAt);
+            Assert.AreEqual(ITimings.RasterWidth, loweredAt);
+            Assert.IsGreaterThan(ITimings.RasterWidth, raisedAt.Value);
+            Assert.IsLessThanOrEqualTo(ITimings.RasterWidth + ITimings.HorizontalRetraceClocks, raisedAt.Value);
+            Assert.AreEqual(ITimings.HorizontalRetraceClocks, raisedAt.Value - loweredAt.Value);
+        }
+
+        [TestMethod]
+        public void TestNMIEnabledTriggersDuringRenderLine()
+        {
+            this.EnableNMI();
+
+            var board = this._board;
+            var cpu = board.CPU;
+
+            ushort destination = 0x4000;
+            var loop = destination;
+            board.Poke(destination++, 0x00);  // loop: NOP
+            board.Poke(destination++, 0x18);  //       JR loop (-3)
+            board.Poke(destination++, 0xfd);
+
+            cpu.PC.Joined = loop;
+            var priorSP = cpu.SP.Joined;
+
+            var nmiCounter = 0;
+            void CPU_LoweredNMI(object? s, EventArgs e) => nmiCounter++;
+            cpu.LoweredNMI += CPU_LoweredNMI;
+
+            this.ULA.RenderLine();
+            Assert.AreEqual(1, nmiCounter);
+
+            Assert.AreEqual((ushort)0x66, cpu.PC.Joined);
+
+            // Not just a return from the NMI to normal flow, but to our expected code
+            Assert.AreEqual((ushort)(priorSP - 2), cpu.SP.Joined);
+            var pushedLow = board.Peek((ushort)(priorSP - 2));
+            var pushedHigh = board.Peek((ushort)(priorSP - 1));
+            var returnedTo = EightBit.Chip.MakeShort(pushedLow, pushedHigh);
+            Assert.AreEqual(loop, returnedTo);
+        }
+
+        [TestMethod]
+        public void TestNMIDisabledDoesNotTriggerDuringRenderLine()
+        {
+            this.DisableNMI();
+
+            var board = this._board;
+            var cpu = board.CPU;
+
+            ushort destination = 0x4000;
+            var loop = destination;
+            board.Poke(destination++, 0x00);  // loop: NOP
+            board.Poke(destination++, 0x18);  //       JR loop (-3)
+            board.Poke(destination++, 0xfd);
+
+            cpu.PC.Joined = loop;
+            var priorSP = cpu.SP.Joined;
+
+            var nmiCounter = 0;
+            void CPU_LoweredNMI(object? s, EventArgs e) => nmiCounter++;
+            cpu.LoweredNMI += CPU_LoweredNMI;
+
+            this.ULA.RenderLine();
+            Assert.AreEqual(0, nmiCounter);
+
+            Assert.IsInRange(loop, loop + 2, cpu.PC.Joined);
+        }
+
+        [TestMethod]
         public void TestUlaPowersUp()
         {
             Assert.IsTrue(this.ULA.Powered);
