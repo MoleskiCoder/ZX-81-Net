@@ -47,9 +47,9 @@
 
         private void CPU_ExecutedInstruction(object? sender, EventArgs e)
         {
-            Debug.Assert(this._board is not null);
             if (this._underReset)
             {
+                Debug.Assert(this._board is not null);
                 Assert.AreEqual(0x00, this._board.CPU.OpCode);
                 ++this._instructionsUnderReset;
             }
