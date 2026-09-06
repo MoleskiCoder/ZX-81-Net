@@ -11,12 +11,15 @@
         protected readonly EightBit.MemoryMapping _romMapping;
         protected readonly EightBit.MemoryMapping _ramMapping;
 
+        private readonly ILogger _logger;
+
         private int _allowed;
 
-        protected AbstractBoard(Configuration configuration)
+        protected AbstractBoard(EightBit.ILogger logger, Configuration configuration)
         {
             this.Settings = configuration;
 
+            this._logger = logger;
             this.CPU = new Z80.Z80(this, this.Ports);
             this._disassembler = new Z80.Disassembler(this);
             this._disassembling = configuration.DebugMode;

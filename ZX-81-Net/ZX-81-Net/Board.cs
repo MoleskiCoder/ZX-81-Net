@@ -6,11 +6,11 @@
     {
         private readonly Configuration _configuration;
 
-        public Board(Configuration configuration)
-        : base(configuration)
+        public Board(EightBit.ILogger logger, Configuration configuration)
+        : base(logger, configuration)
         {
             this._configuration = configuration;
-            this.ULA = new Ula(this);
+            this.ULA = new Ula(logger, this);
         }
 
         public AbstractUla<uint, SDL.Keycode> ULA { get; }

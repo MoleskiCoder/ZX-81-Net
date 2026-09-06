@@ -4,10 +4,10 @@
     {
         private readonly SealedUla _ula;
 
-        public SealedBoard(Configuration configuration)
-        : base(configuration)
+        public SealedBoard(EightBit.ILogger logger, Configuration configuration)
+        : base(logger, configuration)
         {
-            this._ula = new SealedUla(this);
+            this._ula = new SealedUla(logger, this);
         }
 
         public AbstractUla<uint, byte> ULA => this._ula;

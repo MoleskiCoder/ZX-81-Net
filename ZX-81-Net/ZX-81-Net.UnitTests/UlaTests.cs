@@ -1,17 +1,22 @@
 ﻿namespace ZX_81_Net.UnitTests
 {
+    using EightBit;
     using ZX_81_Net;
 
     [TestClass]
     public sealed class UlaTests
     {
+        private readonly Configuration _configuration;
+        private readonly EightBit.ILogger _logger;
         private readonly SealedBoard _board;
         private SealedUla ULA => this._board.ULA as SealedUla ?? throw new InvalidOperationException("ULA is not a SealedUla.");
 
         public UlaTests()
         {
-            var configuration = new Configuration();
-            this._board = new SealedBoard(configuration);
+            this._configuration = new Configuration();
+            this._logger = new ConsoleLogger("Ula tests");
+            this._logger.Verbosity = this._configuration.LoggingLevel;
+            this._board = new SealedBoard(this._logger, this._configuration);
         }
 
         [TestInitialize]
@@ -38,21 +43,17 @@
         public void TestLINECNTR()
         {
             // Stop and reset the line counter
-            Console.WriteLine("* Tests: Freezing LINECNTR");
             this.FreezeLINECNTR();
             Assert.AreEqual(0, this.ULA.LINECNTR);
 
             // Restart the line counter
-            Console.WriteLine("* Tests: Thawing LINECNTR");
             this.ThawLINECNTR();
 
             // Render a single line and make sure LINECNTR has triggered
-            Console.WriteLine("* Tests: Rendering line");
             this.ULA.RenderLine();
             Assert.AreEqual(1, this.ULA.LINECNTR);
 
             // Stop and reset the line counter
-            Console.WriteLine("* Tests: Freezing LINECNTR");
             this.FreezeLINECNTR();
             Assert.AreEqual(0, this.ULA.LINECNTR);
 

@@ -1,7 +1,6 @@
 ﻿namespace ZX_81_Net
 {
     using SDL3;
-    //using ZX_81_Net;
 
     internal sealed class Ula : AbstractUla<uint, SDL.Keycode>
     {
@@ -9,8 +8,8 @@
 
         protected override AbstractColorPalette<uint> Palette => this._palette;
 
-        public Ula(Board bus)
-        : base(bus, bus.Timings, bus.CPU, bus.Ports)
+        public Ula(EightBit.ILogger logger, Board bus)
+        : base(logger, bus, bus.Timings, bus.CPU, bus.Ports)
         {
             this._palette = new ColorPalette();
             this._inkColour = this.Palette.GetColor(ColorPalette.Index.Black);

@@ -11,6 +11,7 @@
 
         public const int PixelsPerCharacter = 8;
 
+        private readonly ILogger _logger;
         private readonly Bus _bus;
         private readonly ITimings _timings;
         private readonly Z80.Z80 _cpu;
@@ -25,6 +26,8 @@
         private bool _lineCounterFrozen = false;
 
         public int LINECNTR => this._lineCounter & (int)Mask.Three;
+
+        private bool _verticalRetrace;
 
         // These aren't real in the ULA, but they're useful for me
         // to work out where I am in the pixel buffer.
@@ -47,8 +50,9 @@
 
         public event EventHandler<EventArgs>? Proceed;
 
-        protected AbstractUla(EightBit.Bus bus, ITimings timings, Z80.Z80 cpu, InputOutput ports)
+        protected AbstractUla(ILogger logger, EightBit.Bus bus, ITimings timings, Z80.Z80 cpu, InputOutput ports)
         {
+            this._logger = logger ?? throw new ArgumentNullException(nameof(logger));
             this._bus = bus ?? throw new ArgumentNullException(nameof(bus));
             this._timings = timings ?? throw new ArgumentNullException(nameof(timings));
             this._cpu = cpu ?? throw new ArgumentNullException(nameof(cpu));
@@ -108,21 +112,21 @@
 
         protected void FreezeLINECNTR()
         {
-            Console.WriteLine("ULA: ** Freezing/resetting LINECNTR");
+            this._logger.Debug("ULA: ** Freezing/resetting LINECNTR");
             this._lineCounterFrozen = true;
             this.ResetLINECNTR();
         }
 
         protected void ThawLINECNTR()
         {
-            Console.WriteLine("ULA: ** Thawing LINECNTR");
+            this._logger.Debug("ULA: ** Thawing LINECNTR");
             this._lineCounterFrozen = false;
         }
 
         protected void IncrementLINECNTR()
         {
             this._lineCounter = (this._lineCounter + 1) & (int)Mask.Three;
-            Console.WriteLine($"ULA: ** Incremented LINECNTR {this._lineCounter}");
+            this._logger.Debug($"ULA: ** Incremented LINECNTR {this._lineCounter}");
         }
 
         protected void MaybeIncrementLINECNTR()
@@ -137,7 +141,7 @@
         {
             if (this._enabledNMI)
             {
-                Console.Out.WriteLine("ULA: Triggering NMI");
+                this._logger.Debug("ULA: Triggering NMI");
                 this._cpu.LowerNMI();
             }
         }
@@ -175,49 +179,46 @@
         {
             if (this.RenderingText())
             {
-                Console.Out.WriteLine($"ULA: Rendering character at raster offset {this._rasterOffset}, {this._rasterOffset / PixelsPerCharacter} character");
+                this._logger.Debug($"ULA: Rendering character at raster offset {this._rasterOffset}, {this._rasterOffset / PixelsPerCharacter} character");
                 var contents = this._bus.Peek(CharacterAddress());
                 this.RenderCharacter(contents);
             }
             else
             {
-                Console.Out.WriteLine($"ULA: Rendering blank (at raster offset {this._rasterOffset}, {this._rasterOffset / PixelsPerCharacter} character");
+                this._logger.Debug($"ULA: Rendering blank (at raster offset {this._rasterOffset}, {this._rasterOffset / PixelsPerCharacter} character");
                 this.RenderCharacter(0);
             }
         }
 
         public void RenderLine()
         {
-            Tick(ITimings.RasterWidth);
+            this.Tick(ITimings.RasterWidth);
             this.MaybeTriggerNMI();
             this.MaybeIncrementLINECNTR();
-            Tick(ITimings.TotalHorizontalClocks);
+            this.Tick(ITimings.HorizontalRetraceClocks);
             this._cpu.RaiseNMI();
+        }
+
+        public void ProcessVerticalRetraceLine()
+        {
+            this.Tick(ITimings.TotalHorizontalClocks);
         }
 
         public void RenderLines()
         {
-            Console.Out.WriteLine("ULA: Rendering frame");
+            this._logger.Debug("ULA: Rendering frame");
             for (int cycle = 0; cycle < this._timings.TotalHeight; ++cycle)
             {
-                this.RenderLine();
+                if (this._verticalRetrace)
+                {
+                    this._logger.Debug("ULA: Processing vertical retrace line");
+                    this.ProcessVerticalRetraceLine();
+                }
+                else
+                {
+                    this.RenderLine();
+                }
             }
-
-            //Console.Out.WriteLine("ULA: Rendering frame");
-            //for (int character = 0; character < this.CharactersPerFrame; ++character)
-            //{
-            //    if (character % CharactersPerLine == 0)
-            //    {
-            //        //Console.WriteLine($"ULA: EOL, Scan line {this._scanLine}");
-            //        this.MaybeTriggerNMI();
-            //        this._scanLine++;
-            //        this._rasterOffset = 0;
-            //        this.Tick(ITimings.HorizontalRetraceClocks);
-            //    }
-            //    if (this._scanLine < this._timings.RasterHeight)
-            //        this.RenderCharacter();
-            //}
-            ////Environment.Exit(0);
         }
 
         public void PokeKey(KeyT raw) => this._keyboardRaw.Add(raw);
@@ -282,9 +283,10 @@
             this._rasterOffset = 0;
 
             var timingMessage = pal ? "PAL" : "NTSC";
-            Console.WriteLine($"ULA: Read port 0x{port.Low:X2}.  Timing is {timingMessage}");
-            //Console.WriteLine("ULA: ** Start VSYNC");
-            //Console.WriteLine("ULA: ** Stop HSYNC");
+            this._logger.Debug($"ULA: Read port 0x{port.Low:X2}.  Timing is {timingMessage}");
+            this._logger.Debug("ULA: ** Start VSYNC");
+            this._verticalRetrace = true;
+            //this._logger.Debug("ULA: ** Start HSYNC");
         }
 
         // 0 - 1	NMI control, bit 0 enable, bit 1 disable (both low)
@@ -308,9 +310,10 @@
 
             this.ThawLINECNTR();
 
-            Console.WriteLine($"ULA: Written port 0x{port.Low:X2} NMI {(this._enabledNMI ? "enabled" : "disabled")}");
-            //Console.WriteLine("ULA: ** Stop VSYNC");
-            //Console.WriteLine("ULA: ** Start HSYNC");
+            this._logger.Debug($"ULA: Written port 0x{port.Low:X2} NMI {(this._enabledNMI ? "enabled" : "disabled")}");
+            this._logger.Debug("ULA: ** Stop VSYNC");
+            this._verticalRetrace = false;
+            //this._logger.Debug("ULA: ** Start HSYNC");
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

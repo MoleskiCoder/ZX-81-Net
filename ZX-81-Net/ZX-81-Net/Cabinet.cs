@@ -3,11 +3,11 @@
     using SDL3;
     using System.Diagnostics;
 
-    internal sealed class Cabinet(Configuration configuration) : Gaming.Game(configuration.LoggingLevel)
+    internal sealed class Cabinet : Gaming.Game
     {
-        public Board Motherboard { get; } = new Board(configuration);
+        public Board Motherboard { get; }
 
-        public Configuration Settings { get; } = configuration;
+        public Configuration Settings { get; }
 
         public void Plug(string path) => this.Motherboard.Plug(path);
 
@@ -24,6 +24,13 @@
         public override int RasterHeight => this.Settings.Timings.RasterHeight;
 
         public override string Title => "Spectrum";
+
+        public Cabinet(Configuration configuration)
+        : base(configuration.LoggingLevel)
+        {
+            this.Motherboard = new Board(this.Logger, configuration);
+            this.Settings = configuration;
+        }
 
         protected override uint[] Pixels()
         {
