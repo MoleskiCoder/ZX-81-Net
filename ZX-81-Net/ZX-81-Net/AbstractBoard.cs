@@ -44,6 +44,7 @@
             if (this._disassembling)
             {
                 this.CPU.ExecutingInstruction += this.CPU_ExecutingInstruction;
+                this.CPU.ExecutedInstruction += this.CPU_ExecutedInstruction;
             }
         }
 
@@ -66,11 +67,8 @@
         {
             this.CPU.RaiseRESET();
             this.CPU.LowerRESET();
-            this._allowed = ITimings.PowerOnResetCycles;
-            while (this._allowed > 0)
-            {
-                this.RunCycle();
-            }
+            this._allowed = this.Timings.PowerOnResetCycles - 1;
+            this.RunCycle();
             this.CPU.RaiseRESET();
         }
 
@@ -82,16 +80,29 @@
             return a14 == 0 ? this._romMapping : this._ramMapping;
         }
 
-        private void CPU_ExecutingInstruction(object? sender, System.EventArgs e)
+        private string _disassembled = "";
+        private byte _disassembledOpCode;
+
+        private void CPU_ExecutingInstruction(object? sender, EventArgs e)
+        {
+            Debug.Assert(this._disassembler is not null, "Disassembler has not been initialized.");
+            Debug.Assert(sender is Z80.Z80);
+            var cpu = (Z80.Z80)sender;
+            this._disassembled = Z80.Disassembler.State(cpu);
+            this._disassembled += cpu.RESET.Raised() ? $" {this._disassembler.Disassemble(cpu)}" : "";
+            this._disassembledOpCode = this.Peek(cpu.PC);
+        }
+
+        private void CPU_ExecutedInstruction(object? sender, EventArgs e)
         {
             Debug.Assert(sender is Z80.Z80);
             var cpu = (Z80.Z80)sender;
-            if (cpu.OpCode == 0)
-                return;
-            var state = Z80.Disassembler.State(cpu);
-            Debug.Assert(this._disassembler is not null, "Disassembler has not been initialized.");
-            var disassembly = this._disassembler.Disassemble(cpu);
-            System.Console.WriteLine($"{state} {disassembly}");
+            var injected = cpu.RESET.Raised() && (cpu.OpCode == 0) && (this._disassembledOpCode != 0);
+            if (injected)
+            {
+                this._disassembled += " (NOP)";
+            }
+            System.Console.WriteLine(this._disassembled);
         }
 
         protected void RunCycle()

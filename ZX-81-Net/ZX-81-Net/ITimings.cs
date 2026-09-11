@@ -22,7 +22,7 @@
 
         public float CpuClockRate => UlaClockRate / 2.0f;
 
-        public const int PowerOnResetCycles = 1; // (int)CpuClockRate / 10;
+        public int PowerOnResetCycles => 1; // (int)this.CpuClockRate / 10;
 
         public int RasterHeight => this.TopRasterBorder + ActiveRasterHeight + this.BottomRasterBorder;
         public int TotalHeight => VerticalRetraceLines + this.RasterHeight;
