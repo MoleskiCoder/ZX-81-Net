@@ -91,6 +91,7 @@
 
         private void CPU_ReadMemory(object? sender, EventArgs e)
         {
+            this._logger.Debug($"ULA: ReadMemory M1.Raised={this._cpu.M1.Raised()} Address={this._bus.Address.Joined:X4} Data={this._bus.Data:X2}");
             if (RenderingText())
             {
                 this._character = this._bus.Data;
@@ -149,7 +150,7 @@
         protected bool RenderingText()
         {
             if (this._cpu.M1.Raised()) return false;
-            var addressing = (this._bus.Address.High & (byte)Bits.Bit7) != 0;
+            var addressing = (this._cpu.PC.High & (byte)Bits.Bit7) != 0;
             var rendering = (this._bus.Data & (byte)Bits.Bit6) == 0;
             return addressing && rendering;
         }

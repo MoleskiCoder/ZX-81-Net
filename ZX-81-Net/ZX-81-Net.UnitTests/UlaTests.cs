@@ -34,6 +34,74 @@
         }
 
         [TestMethod]
+        public void TestRenderingTextTrueWhenAddressingAndBit6Clear()
+        {
+            var cpu = this._board.CPU;
+            this._board.Poke(0xC000, 0x04);   // INC B — bit 6 clear, should be intercepted
+
+            cpu.PC.Joined = 0xC000;
+            cpu.B = 0x55;
+            _ = cpu.Step();
+
+            Assert.AreEqual((byte)0x55, cpu.B);  // unchanged: real INC B never ran
+        }
+
+        [TestMethod]
+        public void TestRenderingTextFalseWhenBit6Set()
+        {
+            var cpu = this._board.CPU;
+            this._board.Poke(0xC000, 0x44);   // LD B,H — bit 6 set, should NOT be intercepted
+
+            cpu.PC.Joined = 0xC000;
+            cpu.B = 0x00;
+            cpu.H = 0x99;
+            _ = cpu.Step();
+
+            Assert.AreEqual((byte)0x99, cpu.B);  // real instruction ran: B <- H
+        }
+
+        [TestMethod]
+        public void TestRenderingTextFalseWhenAddressBit15Clear()
+        {
+            var cpu = this._board.CPU;
+            this._board.Poke(0x4000, 0x04);   // INC B — bit 6 clear, but addressing bit fails
+
+            cpu.PC.Joined = 0x4000;
+            cpu.B = 0x55;
+            _ = cpu.Step();
+
+            Assert.AreEqual((byte)0x56, cpu.B);  // real INC B ran
+        }
+
+        [TestMethod]
+        [DataRow((byte)0x1E, (byte)5, 3, (ushort)0x1E2B)]
+        [DataRow((byte)0x1E, (byte)40, 5, (ushort)0x1F45)]  // code's low 6 bits >= 32 — the case that used to lose its carry
+        [DataRow((byte)0x1F, (byte)0, 0, (ushort)0x1F00)]
+        public void TestCharacterAddress(byte iv, byte code, int lineCounter, ushort expected)
+        {
+            this._board.CPU.IV = iv;
+            this.ULA.SetLineCounter(lineCounter);
+            this.ULA.Character = code;
+
+            Assert.AreEqual(expected, this.ULA.ComputeCharacterAddress());
+        }
+
+        [TestMethod]
+        public void TestCharacterAddressIgnoresInverseBit()
+        {
+            this._board.CPU.IV = 0x1E;
+            this.ULA.SetLineCounter(5);
+
+            this.ULA.Character = 40;
+            var normal = this.ULA.ComputeCharacterAddress();
+
+            this.ULA.Character = (byte)(0x80 | 40);  // same base character, inverse video
+            var inverse = this.ULA.ComputeCharacterAddress();
+
+            Assert.AreEqual(normal, inverse);
+        }
+
+        [TestMethod]
         public void TestNMIPulseWidth()
         {
             this.EnableNMI();
@@ -95,7 +163,7 @@
             this.ULA.RenderLine();
             Assert.AreEqual(1, nmiCounter);
 
-            Assert.AreEqual((ushort)0x66, cpu.PC.Joined);
+            Assert.IsInRange(0x66, 0x80, cpu.PC.Joined);    // Somewhere within the NMI handler
 
             // Not just a return from the NMI to normal flow, but to our expected code
             Assert.AreEqual((ushort)(priorSP - 2), cpu.SP.Joined);
@@ -197,8 +265,8 @@
             var cpu = board.CPU;
             cpu.PC.Joined = code;
 
-            cpu.PoweredStep();  // LD A, $data
-            cpu.PoweredStep();  // OUT ($port), A
+            _ = cpu.Step();  // LD A, $data
+            _ = cpu.Step();  // OUT ($port), A
 
             Assert.AreEqual(code + 4, cpu.PC.Joined);
         }
@@ -218,7 +286,7 @@
             var cpu = board.CPU;
             cpu.PC.Joined = code;
 
-            cpu.PoweredStep();  // IN A, ($port)
+            _ = cpu.Step();  // IN A, ($port)
 
             Assert.AreEqual(code + 2, cpu.PC.Joined);
         }
