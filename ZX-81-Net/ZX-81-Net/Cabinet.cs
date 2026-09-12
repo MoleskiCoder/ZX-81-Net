@@ -23,7 +23,7 @@
 
         public override int RasterHeight => this.Settings.Timings.RasterHeight;
 
-        public override string Title => "Spectrum";
+        public override string Title => "ZX-81";
 
         public Cabinet(Configuration configuration)
         : base(configuration.LoggingLevel)
