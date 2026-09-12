@@ -7,6 +7,8 @@
         internal SealedUla(EightBit.ILogger logger, SealedBoard board)
         : base(logger, board, board.Timings, board.CPU, board.Ports)
         {
+            this._inkColour = 1;
+            this._paperColour = 0;
         }
 
         protected override AbstractColorPalette<uint> Palette => _palette;
@@ -35,5 +37,7 @@
         public ushort ComputeCharacterAddress() => this.CharacterAddress();
 
         public bool CheckMaskableInterruptNeeded() => this.MaskableInterruptNeeded();
+
+        public bool CheckRenderingText() => this.RenderingText();
     }
 }

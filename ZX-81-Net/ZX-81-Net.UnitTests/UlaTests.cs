@@ -34,6 +34,25 @@
         }
 
         [TestMethod]
+        public void TestRenderingTextIsStaleAfterInstructionCompletes()
+        {
+            var board = this._board;
+            var cpu = board.CPU;
+
+            board.Poke(0xC000, 0x04); // bit 6 clear - would be "rendering" if checked during the actual fetch
+            cpu.PC.Joined = 0xC000;
+
+            _ = cpu.Step(); // fetch + execute completes - M1 is back to Raised by now
+
+            var result = this.ULA.CheckRenderingText();
+
+            Assert.IsFalse(result,
+                "RenderingText() no longer reflects the fetch that already happened - " +
+                "RenderCharacter() cannot safely re-derive this after the fact; it needs " +
+                "a value captured at the moment of the real CPU_ReadMemory event instead.");
+        }
+
+        [TestMethod]
         public void TestRenderingTextTrueWhenAddressingAndBit6Clear()
         {
             var cpu = this._board.CPU;

@@ -35,6 +35,7 @@
         protected int _rasterOffset;
 
         protected byte _character;
+        protected bool _renderingCharacter;
 
         protected Z80.RefreshRegister _oldRefreshRegister;
         protected bool _enabledNMI;
@@ -99,7 +100,8 @@
         private void CPU_ReadMemory(object? sender, EventArgs e)
         {
             this.Diagnose($"ReadMemory M1={this._cpu.M1} Address={this._bus.Address.Joined:X4} Data={this._bus.Data:X2}");
-            if (RenderingText())
+            this._renderingCharacter = this.RenderingText();
+            if (this._renderingCharacter)
             {
                 this._character = this._bus.Data;
                 this._bus.Data = 0;
@@ -194,7 +196,7 @@
 
         public void RenderCharacter()
         {
-            if (this.RenderingText())
+            if (this._renderingCharacter)
             {
                 this.Diagnose($"Rendering character at raster offset {this._rasterOffset}, character {this._rasterOffset / PixelsPerCharacter})");
                 var contents = this._bus.Peek(CharacterAddress());
