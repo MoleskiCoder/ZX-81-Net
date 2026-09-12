@@ -92,7 +92,7 @@
 
         private void CPU_RaisedRFSH(object? sender, EventArgs e)
         {
-            this.Inform("RFSH raised");
+            this.Diagnose("RFSH raised");
             this.MaybeTriggerMaskableInterrupt();
         }
 
@@ -209,7 +209,7 @@
 
         public void RenderLine()
         {
-            this.Inform($"PC: {this._cpu.PC.Joined:x4}");
+            this.Inform($"Rendering line: PC: {this._cpu.PC.Joined:x4}");
             for (var character = 0; character < CharactersPerLine; ++character)
             {
                 this.RenderCharacter();
