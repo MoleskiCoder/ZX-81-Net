@@ -36,7 +36,7 @@
 
         protected byte _character;
 
-        protected byte _oldRefreshRegister;
+        protected Z80.RefreshRegister _oldRefreshRegister;
         protected bool _enabledNMI;
 
         protected readonly Dictionary<byte, KeyT[]> _keyboardMapping = [];
@@ -67,12 +67,17 @@
             this._ports.WrittenPort += this.Ports_WrittenPort;
         }
 
-        private bool MaskableInterruptNeeded()
+        protected void Inform(string message) => this._logger.Inform($"ULA: {message}");
+
+        protected void Diagnose(string message) => this._logger.Debug($"ULA: {message}");
+
+        protected bool MaskableInterruptNeeded()
         {
-            if (this._cpu.M1.Raised()) return false;
-            var previous = (this._oldRefreshRegister & 0b00100000) != 0;
-            this._oldRefreshRegister = (byte)this._cpu.REFRESH;
-            var current = (this._oldRefreshRegister & 0b00100000) != 0;
+            this.Diagnose($"Held REFRESH: {(byte)this._oldRefreshRegister:x2}");
+            this.Diagnose($"Current REFRESH: {(byte)this._cpu.REFRESH:x2}");
+            var previous = (this._oldRefreshRegister & 0b01000000) != 0;
+            this._oldRefreshRegister = this._cpu.REFRESH;
+            var current = (this._oldRefreshRegister & 0b01000000) != 0;
             return previous && !current;
         }
 
@@ -80,18 +85,20 @@
         {
             if (MaskableInterruptNeeded())
             {
+                this.Inform("Triggering INT");
                 this._cpu.LowerINT();
             }
         }
 
         private void CPU_RaisedRFSH(object? sender, EventArgs e)
         {
+            this.Inform("RFSH raised");
             this.MaybeTriggerMaskableInterrupt();
         }
 
         private void CPU_ReadMemory(object? sender, EventArgs e)
         {
-            this._logger.Debug($"ULA: ReadMemory M1.Raised={this._cpu.M1.Raised()} Address={this._bus.Address.Joined:X4} Data={this._bus.Data:X2}");
+            this.Diagnose($"ReadMemory M1={this._cpu.M1} Address={this._bus.Address.Joined:X4} Data={this._bus.Data:X2}");
             if (RenderingText())
             {
                 this._character = this._bus.Data;
@@ -113,21 +120,21 @@
 
         protected void FreezeLINECNTR()
         {
-            this._logger.Debug("ULA: ** Freezing/resetting LINECNTR");
+            this.Diagnose("** Freezing LINECNTR");
             this._lineCounterFrozen = true;
             this.ResetLINECNTR();
         }
 
         protected void ThawLINECNTR()
         {
-            this._logger.Debug("ULA: ** Thawing LINECNTR");
+            this.Diagnose("** Thawing LINECNTR");
             this._lineCounterFrozen = false;
         }
 
         protected void IncrementLINECNTR()
         {
             this._lineCounter = (this._lineCounter + 1) & (int)Mask.Three;
-            this._logger.Debug($"ULA: ** Incremented LINECNTR {this._lineCounter}");
+            this.Diagnose($"** Incremented LINECNTR {this._lineCounter}");
         }
 
         protected void MaybeIncrementLINECNTR()
@@ -136,17 +143,26 @@
             this.IncrementLINECNTR();
         }
 
-        protected void ResetLINECNTR() => this._lineCounter = 0;
+        protected void ResetLINECNTR()
+        {
+            this.Diagnose("** Resetting LINECNTR");
+            this._lineCounter = 0;
+        }
 
         protected void MaybeTriggerNMI()
         {
             if (this._enabledNMI)
             {
-                this._logger.Debug("ULA: Triggering NMI");
+                this.Diagnose("Triggering NMI");
                 this._cpu.LowerNMI();
             }
         }
 
+        // NOTE: bus address does not necessarily hold "the current fetch address".
+        // After an M1-cycle read, the CPU drives a refresh cycle onto the address bus
+        // (I register high byte, REFRESH low byte) - the same address-construction pattern
+        // CharacterAddress() uses.  Code needing "where is the CPU rendering from right now"
+        // should read cpu.PC directly rather than via the bus.
         protected bool RenderingText()
         {
             if (this._cpu.M1.Raised()) return false;
@@ -180,24 +196,36 @@
         {
             if (this.RenderingText())
             {
-                this._logger.Debug($"ULA: Rendering character at raster offset {this._rasterOffset}, {this._rasterOffset / PixelsPerCharacter} character");
+                this.Diagnose($"Rendering character at raster offset {this._rasterOffset}, character {this._rasterOffset / PixelsPerCharacter})");
                 var contents = this._bus.Peek(CharacterAddress());
                 this.RenderCharacter(contents);
             }
             else
             {
-                this._logger.Debug($"ULA: Rendering blank (at raster offset {this._rasterOffset}, {this._rasterOffset / PixelsPerCharacter} character");
+                this.Diagnose($"Rendering blank (at raster offset {this._rasterOffset}, character {this._rasterOffset / PixelsPerCharacter})");
                 this.RenderCharacter(0);
             }
         }
 
         public void RenderLine()
         {
-            this.Tick(ITimings.RasterWidth);
+            this.Inform($"PC: {this._cpu.PC.Joined:x4}");
+            for (var character = 0; character < CharactersPerLine; ++character)
+            {
+                this.RenderCharacter();
+            }
             this.MaybeTriggerNMI();
             this.MaybeIncrementLINECNTR();
             this.Tick(ITimings.HorizontalRetraceClocks);
             this._cpu.RaiseNMI();
+
+            this._rasterOffset = 0;
+            if (this._scanLine < this._timings.RasterHeight - 1)
+            {
+                this._scanLine++;
+            }
+            // else: no VSYNC (port read) has happened yet to reset us - hold
+            // at the last valid line rather than overrunning the pixel buffer.
         }
 
         public void ProcessVerticalRetraceLine()
@@ -207,12 +235,12 @@
 
         public void RenderLines()
         {
-            this._logger.Debug("ULA: Rendering frame");
+            this.Diagnose("Rendering frame");
             for (int cycle = 0; cycle < this._timings.TotalHeight; ++cycle)
             {
                 if (this._verticalRetrace)
                 {
-                    this._logger.Debug("ULA: Processing vertical retrace line");
+                    this.Diagnose("Processing vertical retrace line");
                     this.ProcessVerticalRetraceLine();
                 }
                 else
@@ -284,10 +312,10 @@
             this._rasterOffset = 0;
 
             var timingMessage = pal ? "PAL" : "NTSC";
-            this._logger.Debug($"ULA: Read port 0x{port.Low:X2}.  Timing is {timingMessage}");
-            this._logger.Debug("ULA: ** Start VSYNC");
+            this.Diagnose($"Read port 0x{port.Low:X2}.  Timing is {timingMessage}");
+            this.Diagnose("** Start VSYNC");
             this._verticalRetrace = true;
-            //this._logger.Debug("ULA: ** Start HSYNC");
+            //this.Diagnose("** Start HSYNC");
         }
 
         // 0 - 1	NMI control, bit 0 enable, bit 1 disable (both low)
@@ -311,10 +339,10 @@
 
             this.ThawLINECNTR();
 
-            this._logger.Debug($"ULA: Written port 0x{port.Low:X2} NMI {(this._enabledNMI ? "enabled" : "disabled")}");
-            this._logger.Debug("ULA: ** Stop VSYNC");
+            this.Diagnose($"Written port 0x{port.Low:X2} NMI {(this._enabledNMI ? "enabled" : "disabled")}");
+            this.Diagnose("** Stop VSYNC");
             this._verticalRetrace = false;
-            //this._logger.Debug("ULA: ** Start HSYNC");
+            //this.Diagnose("** Start HSYNC");
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

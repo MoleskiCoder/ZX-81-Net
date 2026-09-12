@@ -33,5 +33,7 @@
         }
 
         public ushort ComputeCharacterAddress() => this.CharacterAddress();
+
+        public bool CheckMaskableInterruptNeeded() => this.MaskableInterruptNeeded();
     }
 }

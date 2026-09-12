@@ -201,6 +201,67 @@
         }
 
         [TestMethod]
+        public void TestRenderingTextTriggersUnderRunDrivenExecution()
+        {
+            var board = this._board;
+            var cpu = board.CPU;
+
+            board.Poke(0xC000, 0x04);   // INC B
+            cpu.PC.Joined = 0xC000;
+            cpu.B = 0x55;
+
+            _ = cpu.Run(1);
+
+            Assert.AreEqual((byte)0x55, cpu.B);  // if this fails, Run() doesn't see it the way Step() does
+        }
+
+        [TestMethod]
+        public void TestMaskableInterruptNeededOnFallingEdge()
+        {
+            var cpu = this._board.CPU;
+
+            cpu.REFRESH = 0x40; // bit 6 set
+            _ = this.ULA.CheckMaskableInterruptNeeded();
+
+            cpu.REFRESH = 0x00; // bit 6 now clear - falling edge
+            Assert.IsTrue(this.ULA.CheckMaskableInterruptNeeded());
+        }
+
+        [TestMethod]
+        public void TestMaskableInterruptNotNeededWithoutFallingEdge()
+        {
+            var cpu = this._board.CPU;
+
+            cpu.REFRESH = 0x00;
+            _ = this.ULA.CheckMaskableInterruptNeeded();
+
+            cpu.REFRESH = 0x40; // rising edge, not falling
+            Assert.IsFalse(this.ULA.CheckMaskableInterruptNeeded());
+        }
+
+        [TestMethod]
+        public void TestMaskableInterruptEventuallyFiresDuringExecution()
+        {
+            var board = this._board;
+            var cpu = board.CPU;
+            board.Poke(0x4010, 0x00); // NOP
+            board.Poke(0x4011, 0x18); // JR
+            board.Poke(0x4012, 0xFD); // -3 -> loop
+            cpu.PC.Joined = 0x4010;
+
+            var intLowered = false;
+            void CPU_LoweredINT(object? s, EventArgs e) => intLowered = true;
+            cpu.LoweredINT += CPU_LoweredINT; // assuming this event exists, mirroring LoweredNMI
+
+            for (var i = 0; i < 500 && !intLowered; i++)
+            {
+                _ = cpu.Step();
+            }
+
+            Assert.IsTrue(intLowered);
+        }
+
+        [TestMethod]
         public void TestUlaPowersUp()
         {
             Assert.IsTrue(this.ULA.Powered);
