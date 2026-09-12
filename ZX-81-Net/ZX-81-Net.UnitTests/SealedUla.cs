@@ -19,6 +19,8 @@
             // Populate _keyboardMapping here if your code expects keyboard behaviour.
         }
 
+        public int ScanLine => this._scanLine;
+        public int RasterOffset => this._rasterOffset;
         public byte Character
         {
             get => this._character;
@@ -39,5 +41,7 @@
         public bool CheckMaskableInterruptNeeded() => this.MaskableInterruptNeeded();
 
         public bool CheckRenderingText() => this.RenderingText();
+
+        public void SetRenderingCharacter(bool value) => this._renderingCharacter = value;
     }
 }

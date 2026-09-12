@@ -34,6 +34,169 @@
         }
 
         [TestMethod]
+        public void TestRealPortReadResetsScanLineAndRasterOffset()
+        {
+            var board = this._board;
+            var cpu = board.CPU;
+
+            ushort destination = 0x4000;
+            var loop = destination;
+            board.Poke(destination++, 0x00);  // loop: NOP
+            board.Poke(destination++, 0x18);  //       JR loop (-3)
+            board.Poke(destination++, 0xfd);
+            cpu.PC.Joined = loop;
+
+            for (var i = 0; i < 5; i++)
+            {
+                this.ULA.RenderLine();
+            }
+            Assert.AreEqual(5, this.ULA.ScanLine);
+
+            this.FreezeLINECNTR();
+
+            Assert.AreEqual(0, this.ULA.ScanLine);
+            Assert.AreEqual(0, this.ULA.RasterOffset);
+        }
+
+        [TestMethod]
+        public void TestRenderLineHoldsAtLastScanLineWithoutVSync()
+        {
+            var board = this._board;
+            var cpu = board.CPU;
+
+            ushort destination = 0x4000;
+            var loop = destination;
+            board.Poke(destination++, 0x00);  // loop: NOP
+            board.Poke(destination++, 0x18);  //       JR loop (-3)
+            board.Poke(destination++, 0xfd);
+            cpu.PC.Joined = loop;
+
+            var rasterHeight = this._configuration.Timings.RasterHeight;
+
+            // Deliberately run well past RasterHeight - no port read occurs,
+            // so nothing should ever reset ScanLine back to 0.
+            for (var i = 0; i < rasterHeight + 20; i++)
+            {
+                this.ULA.RenderLine();
+            }
+
+            Assert.AreEqual(rasterHeight - 1, this.ULA.ScanLine);
+        }
+
+        [TestMethod]
+        public void TestRenderLineAdvancesScanLineAndResetsRasterOffset()
+        {
+            var board = this._board;
+            var cpu = board.CPU;
+
+            ushort destination = 0x4000;
+            var loop = destination;
+            board.Poke(destination++, 0x00);  // loop: NOP
+            board.Poke(destination++, 0x18);  //       JR loop (-3)
+            board.Poke(destination++, 0xfd);
+            cpu.PC.Joined = loop;
+
+            Assert.AreEqual(0, this.ULA.ScanLine);
+
+            this.ULA.RenderLine();
+
+            Assert.AreEqual(1, this.ULA.ScanLine);
+            Assert.AreEqual(0, this.ULA.RasterOffset);
+        }
+
+        [TestMethod]
+        public void TestRenderCharacterSequenceStaysAlignedAcrossMultipleCharacters()
+        {
+            var board = this._board;
+            var cpu = board.CPU;
+
+            cpu.IV = 0x40; // RAM-backed "character ROM" page, as before
+            this.ULA.SetLineCounter(0);
+
+            // Three consecutive display-file bytes (bit 6 clear - genuine characters)
+            board.Poke(0xC000, 5);
+            board.Poke(0xC001, 10);
+            board.Poke(0xC002, 15);
+
+            // Distinct bitmaps at each code's computed character address (line 0)
+            board.Poke(0x4000 + (5 << 3), 0b10000001);
+            board.Poke(0x4000 + (10 << 3), 0b01000010);
+            board.Poke(0x4000 + (15 << 3), 0b00100100);
+
+            cpu.PC.Joined = 0xC000;
+
+            // Prime _renderingCharacter/_character: nothing has been fetched yet, so
+            // the very first RenderCharacter() call would still reflect whatever
+            // state existed before this test ran. Force one real fetch first so the
+            // loop below starts from a known-correct state rather than stale boot data.
+            _ = cpu.Step();
+
+            var pixels = this.ULA.Pixels!;
+            var expectedBitmaps = new byte[] { 0b10000001, 0b01000010, 0b00100100 };
+
+            for (var character = 0; character < 3; ++character)
+            {
+                this.ULA.RenderCharacter();
+            }
+
+            for (var character = 0; character < 3; ++character)
+            {
+                var bitmap = expectedBitmaps[character];
+                for (var bit = 0; bit < 8; ++bit)
+                {
+                    var expectInk = (bitmap & (1 << bit)) != 0;
+                    var actual = pixels[character * 8 + bit];
+                    Assert.AreEqual(expectInk ? 1u : 0u, actual,
+                        $"character {character}, bit {bit} mismatch (expected bitmap {bitmap:X2})");
+                }
+            }
+        }
+
+        [TestMethod]
+        public void TestRenderCharacterPaintsBitmapWhenRenderingCharacterTrue()
+        {
+            var board = this._board;
+            var cpu = board.CPU;
+
+            cpu.IV = 0x40; // NOT 0x1E - that's the real (read-only) character ROM page
+            this.ULA.SetLineCounter(3);
+            this.ULA.Character = 5;
+            this.ULA.SetRenderingCharacter(true);
+
+            var bitmap = (byte)0b10110000;
+            board.Poke(this.ULA.ComputeCharacterAddress(), bitmap); // now 0x402B - genuine RAM
+
+            this.ULA.RenderCharacter();
+
+            var pixels = this.ULA.Pixels!;
+            for (var bit = 0; bit < 8; ++bit)
+            {
+                var expectInk = (bitmap & (1 << bit)) != 0;
+                Assert.AreEqual(expectInk ? 1u : 0u, pixels[bit], $"bit {bit} mismatch");
+            }
+        }
+
+        [TestMethod]
+        public void TestRenderCharacterPaintsBlankWhenRenderingCharacterFalse()
+        {
+            var board = this._board;
+
+            this.ULA.SetRenderingCharacter(false);
+            // Deliberately poke a non-zero byte at whatever address CharacterAddress()
+            // would compute, to prove it's genuinely ignored on this path, not just
+            // coincidentally zero.
+            board.Poke(this.ULA.ComputeCharacterAddress(), 0xFF);
+
+            this.ULA.RenderCharacter();
+
+            var pixels = this.ULA.Pixels!;
+            for (var bit = 0; bit < 8; ++bit)
+            {
+                Assert.AreEqual(0u, pixels[bit], $"bit {bit} should be paper colour");
+            }
+        }
+
+        [TestMethod]
         public void TestRenderingTextIsStaleAfterInstructionCompletes()
         {
             var board = this._board;
@@ -171,8 +334,8 @@
             board.Poke(destination++, 0x00);  // loop: NOP
             board.Poke(destination++, 0x18);  //       JR loop (-3)
             board.Poke(destination++, 0xfd);
-
             cpu.PC.Joined = loop;
+
             var priorSP = cpu.SP.Joined;
 
             var nmiCounter = 0;
@@ -263,10 +426,13 @@
         {
             var board = this._board;
             var cpu = board.CPU;
-            board.Poke(0x4010, 0x00); // NOP
-            board.Poke(0x4011, 0x18); // JR
-            board.Poke(0x4012, 0xFD); // -3 -> loop
-            cpu.PC.Joined = 0x4010;
+
+            ushort destination = 0x4000;
+            var loop = destination;
+            board.Poke(destination++, 0x00);  // loop: NOP
+            board.Poke(destination++, 0x18);  //       JR loop (-3)
+            board.Poke(destination++, 0xfd);
+            cpu.PC.Joined = loop;
 
             var intLowered = false;
             void CPU_LoweredINT(object? s, EventArgs e) => intLowered = true;
