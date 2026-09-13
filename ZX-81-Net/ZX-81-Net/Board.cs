@@ -19,7 +19,8 @@
         {
             base.Initialize();
             var romDirectory = this._configuration.RomDirectory;
-            this.Plug(romDirectory + "\\zx81.rom");	// ZX-81 Basic
+            this.Plug($"{romDirectory}\\zx81.rom");	// ZX-81 Basic
+            this._labels.Parse($"{romDirectory}\\zx81.sym");
             this.ULA.Proceed += this.ULA_Proceed;
         }
 

@@ -5,13 +5,14 @@
 
     internal class AbstractBoard : EightBit.Bus
     {
+        private readonly ILogger _logger;
+
+        protected readonly Z80.Labels _labels;
         protected readonly Z80.Disassembler? _disassembler;
         protected readonly bool _disassembling;
 
         protected readonly EightBit.MemoryMapping _romMapping;
         protected readonly EightBit.MemoryMapping _ramMapping;
-
-        private readonly ILogger _logger;
 
         private int _allowed;
 
@@ -20,8 +21,9 @@
             this.Settings = configuration;
 
             this._logger = logger;
+            this._labels = new Z80.Labels(logger);
             this.CPU = new Z80.Z80(this, this.Ports);
-            this._disassembler = new Z80.Disassembler(this);
+            this._disassembler = new Z80.Disassembler(this, this._labels);
             this._disassembling = configuration.DebugMode;
             this._romMapping = new(this.ROM, 0x0000, (int)Mask.Thirteen, EightBit.AccessLevel.ReadOnly);
             this._ramMapping = new(this.RAM, 0x4000, (int)Mask.Fourteen, EightBit.AccessLevel.ReadWrite);
