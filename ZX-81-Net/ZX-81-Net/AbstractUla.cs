@@ -74,8 +74,7 @@
 
         protected bool MaskableInterruptNeeded()
         {
-            this.Diagnose($"Held REFRESH: {(byte)this._oldRefreshRegister:x2}");
-            this.Diagnose($"Current REFRESH: {(byte)this._cpu.REFRESH:x2}");
+            this.Diagnose($"REFRESH: Held: {(byte)this._oldRefreshRegister:x2}, Current: {(byte)this._cpu.REFRESH:x2}");
             var previous = (this._oldRefreshRegister & 0b01000000) != 0;
             this._oldRefreshRegister = this._cpu.REFRESH;
             var current = (this._oldRefreshRegister & 0b01000000) != 0;
@@ -301,9 +300,6 @@
 
         private void ReadingPort(Register16 port)
         {
-            this.Inform($"Reading port 0x{port.Low:X2}");
-
-            this.Inform("** Read keyboard");
             var portHigh = port.High;
             var selected = this.FindSelectedKeys((byte)~portHigh);
             var pal = this._timings is PalTimings;
@@ -311,19 +307,13 @@
             var value = selected | timing;
             this._ports.WriteInputPort(port, (byte)value);
 
-            this.Inform("** Freeze LINECNTR");
             this.FreezeLINECNTR();
-
             this._scanLine = 0;
             this._rasterOffset = 0;
-
-            var timingMessage = pal ? "PAL" : "NTSC";
-            this.Inform($"** Timing is {timingMessage}");
-
-            this.Inform("** Start VSYNC");
             this._verticalRetrace = true;
 
-            //this.Inform("** Start HSYNC");
+            var timingMessage = pal ? "PAL" : "NTSC";
+            this.Inform($"Reading port 0x{port.Low:X2}: Timing is {timingMessage}, Read keyboard, Freeze LINECNTR, Start VSYNC");
         }
 
         // 0 - 1	NMI control, bit 0 enable, bit 1 disable (both low)
@@ -337,8 +327,6 @@
 
         private void WrittenPort(Register16 port)
         {
-            this.Inform($"Written port 0x{port.Low:X2}");
-
             // Nominally FE Bit 0 of port address low == NMI on
             var enableNMI = (port.Low & (byte)Bits.Bit0) == 0;
             this._enabledNMI = enableNMI;
@@ -347,15 +335,10 @@
             var disableNMI = (port.Low & (byte)Bits.Bit1) == 0;
             this._enabledNMI = !disableNMI;
 
-            this.Inform($"** NMI {(this._enabledNMI ? "enabled" : "disabled")}");
-
-            this.Inform("** Thaw LINECNTR");
             this.ThawLINECNTR();
-
-            this.Inform("** Stop VSYNC");
             this._verticalRetrace = false;
 
-            //this.Inform("** Start HSYNC");
+            this.Inform($"Written port 0x{port.Low:X2}: NMI {(this._enabledNMI ? "enabled" : "disabled")}, Thaw LINECNTR, Stop VSYNC");
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

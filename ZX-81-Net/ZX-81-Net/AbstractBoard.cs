@@ -9,7 +9,7 @@
 
         protected readonly Z80.Labels _labels;
         protected readonly Z80.Disassembler? _disassembler;
-        protected readonly bool _disassembling;
+        protected bool Disassembling => this._logger.Debugging;
 
         protected readonly EightBit.MemoryMapping _romMapping;
         protected readonly EightBit.MemoryMapping _ramMapping;
@@ -24,7 +24,6 @@
             this._labels = new Z80.Labels(logger);
             this.CPU = new Z80.Z80(this, this.Ports);
             this._disassembler = new Z80.Disassembler(this, this._labels);
-            this._disassembling = configuration.DebugMode;
             this._romMapping = new(this.ROM, 0x0000, (int)Mask.Thirteen, EightBit.AccessLevel.ReadOnly);
             this._ramMapping = new(this.RAM, 0x4000, (int)Mask.Fourteen, EightBit.AccessLevel.ReadWrite);
         }
@@ -43,7 +42,7 @@
 
         public override void Initialize()
         {
-            if (this._disassembling)
+            if (this.Disassembling)
             {
                 this.CPU.ExecutingInstruction += this.CPU_ExecutingInstruction;
                 this.CPU.ExecutedInstruction += this.CPU_ExecutedInstruction;
@@ -104,7 +103,7 @@
             {
                 this._disassembled += " (NOP)";
             }
-            System.Console.WriteLine(this._disassembled);
+            this._logger.Debug(this._disassembled);
         }
 
         protected void RunCycle()
