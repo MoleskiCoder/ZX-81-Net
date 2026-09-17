@@ -16,7 +16,7 @@
 
         public BoardTests()
         {
-            Directory.SetCurrentDirectory(@"c:\github\zx81");
+            Directory.SetCurrentDirectory(@"C:\github\ZX-81-Net");
             this._configuration = new Configuration();
             this._logger = new ConsoleLogger("Board tests");
             this._logger.Verbosity = this._configuration.LoggingLevel;
