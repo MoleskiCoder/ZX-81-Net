@@ -89,8 +89,7 @@
             Debug.Assert(this._disassembler is not null, "Disassembler has not been initialized.");
             Debug.Assert(sender is Z80.Z80);
             var cpu = (Z80.Z80)sender;
-            this._disassembled = Z80.Disassembler.State(cpu);
-            this._disassembled += cpu.RESET.Raised() ? $" {this._disassembler.Disassemble(cpu)}" : "";
+            this._disassembled = $"{Z80.Disassembler.State(cpu)} {this._disassembler.Disassemble(cpu)}";
             this._disassembledOpCode = this.Peek(cpu.PC);
         }
 
