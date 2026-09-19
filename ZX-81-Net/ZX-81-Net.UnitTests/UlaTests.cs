@@ -1,20 +1,17 @@
 ﻿namespace ZX_81_Net.UnitTests
 {
-    using EightBit;
     using ZX_81_Net;
 
     [TestClass]
     public sealed class UlaTests
     {
-        private readonly Configuration _configuration;
-        private readonly EightBit.ILogger _logger;
+        private readonly Configuration _configuration = new();
+        private readonly EightBit.ConsoleLogger _logger = new("Ula tests");
         private readonly SealedBoard _board;
         private SealedUla ULA => this._board.ULA as SealedUla ?? throw new InvalidOperationException("ULA is not a SealedUla.");
 
         public UlaTests()
         {
-            this._configuration = new Configuration();
-            this._logger = new ConsoleLogger("Ula tests");
             this._logger.Verbosity = this._configuration.LoggingLevel;
             this._board = new SealedBoard(this._logger, this._configuration);
         }
