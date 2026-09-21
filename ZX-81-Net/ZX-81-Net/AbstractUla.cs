@@ -59,6 +59,7 @@
             this._cpu = cpu ?? throw new ArgumentNullException(nameof(cpu));
             this._ports = ports ?? throw new ArgumentNullException(nameof(ports));
 
+            this._cpu.RaisedIORQ += this.CPU_RaisedIORQ;
             this._cpu.RaisedRFSH += this.CPU_RaisedRFSH;
             this._cpu.ReadMemory += CPU_ReadMemory;
 
@@ -87,6 +88,17 @@
             {
                 this.Diagnose("Triggering INT");
                 this._cpu.LowerINT();
+            }
+        }
+
+        private void CPU_RaisedIORQ(object? sender, EventArgs e)
+        {
+            // This only occurs in the midst of the Z80 INT implementation
+            if (this._cpu.M1.Lowered())
+            {
+                Debug.Assert(this._cpu.INT.Lowered());
+                this.Diagnose("Terminating INT");
+                this._cpu.RaiseINT();
             }
         }
 
